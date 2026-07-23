@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSA → JSON Fault Tree Converter</title>
+<style>
+  :root {
+    --bg: #0f1416;
+    --panel: #161d20;
+    --panel-2: #1c2529;
+    --line: #2a353a;
+    --line-bright: #3a494f;
+    --text: #d9e2e4;
+    --text-dim: #8fa3a8;
+    --accent: #4fb3a9;
+    --accent-dim: #2d5e58;
+    --warn: #d99a4f;
+    --mono: "IBM Plex Mono", "SF Mono", "Courier New", monospace;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(var(--bg), var(--bg)),
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 40px);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 20px;
+  }
+
+  .title-block .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #eef4f4;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    margin-top: 6px;
+    max-width: 480px;
+    line-height: 1.5;
+  }
+
+  .schema-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    padding: 5px 10px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 26px;
+    margin-bottom: 20px;
+  }
+
+  .drop-zone {
+    border: 1.5px dashed var(--line-bright);
+    border-radius: 6px;
+    padding: 44px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(79, 179, 169, 0.05);
+  }
+
+  .drop-zone .glyph {
+    font-family: var(--mono);
+    font-size: 28px;
+    color: var(--accent);
+    margin-bottom: 10px;
+    line-height: 1;
+  }
+
+  .drop-zone .primary {
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .drop-zone .primary strong { color: var(--accent); font-weight: 600; }
+
+  .drop-zone .secondary {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-dim);
+  }
+
+  input[type=file] { display: none; }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    min-height: 18px;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--line-bright);
+    flex-shrink: 0;
+  }
+  .status-dot.ok { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .status-dot.err { background: #d96f4f; box-shadow: 0 0 6px #d96f4f; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--panel);
+    padding: 16px 18px;
+  }
+  .stat .num {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .stat .lbl {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  .ft-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ft-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 13px 16px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, transform 0.08s ease;
+  }
+  .ft-row:hover {
+    border-color: var(--accent);
+    transform: translateX(2px);
+  }
+  .ft-row.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .ft-row.disabled:hover { transform: none; border-color: var(--line); }
+
+  .ft-main .ft-id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+  .ft-main .ft-desc {
+    font-size: 14px;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .ft-flag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .ft-arrow {
+    font-family: var(--mono);
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(6, 9, 10, 0.72);
+    backdrop-filter: blur(2px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--line-bright);
+    border-radius: 8px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-head {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .modal-head h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    color: #eef4f4;
+  }
+  .modal-head p {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+  .modal-close {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    width: 28px; height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .modal-close:hover { border-color: var(--accent); color: var(--accent); }
+
+  .modal-body {
+    padding: 16px 24px 24px;
+    overflow-y: auto;
+  }
+
+  /* Result view */
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .result-header .rid {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+  .btn-row { display: flex; gap: 10px; }
+
+  button.action {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 16px;
+    border-radius: 5px;
+    border: 1px solid var(--line-bright);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  button.action:hover { border-color: var(--accent); color: var(--accent); }
+  button.action.primary {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: #eaf7f5;
+  }
+  button.action.primary:hover { background: var(--accent); color: #06100f; }
+
+  pre.json-view {
+    background: #0b0f10;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: #b8d4d0;
+    max-height: 480px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .empty-note {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 30px 10px;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 40px;
+    letter-spacing: 0.04em;
+  }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 5px; }
+
+  /* ---------------- Diagram panel ---------------- */
+
+  .diagram-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-label input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+  .diagram-frame {
+    background: #fbfbf9;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    height: 620px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .diagram-hint {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: #7a8a86;
+    background: rgba(255,255,255,0.85);
+    padding: 3px 8px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  #ftaSvg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+    user-select: none;
+  }
+  #ftaSvg text {
+    font-size: 12px;
+    font-family: Arial, sans-serif;
+    fill: #1a1a1a;
+  }
+
+  #ftaSvg .description-box {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .diagram-frame.show-descriptions #ftaSvg .description-box {
+    visibility: visible;
+    opacity: 1;
+  }
+  #ftaSvg .node:hover > .description-box {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  #ftaSvg .basic-event:hover circle,
+  #ftaSvg .house-event:hover polygon,
+  #ftaSvg .and-gate:hover path,
+  #ftaSvg .or-gate:hover path,
+  #ftaSvg .nand-gate:hover path,
+  #ftaSvg .nand-gate:hover circle,
+  #ftaSvg .nor-gate:hover path,
+  #ftaSvg .nor-gate:hover circle,
+  #ftaSvg .vote-gate:hover path {
+    fill: #fff3b0;
+  }
+  #ftaSvg .transfer-gate:hover polygon {
+    fill: #fff3b0;
+  }
+
+  #ftaSvg .node[data-collapsible="true"] { cursor: pointer; }
+  #ftaSvg .node.collapsed .transfer-gate polygon { stroke-dasharray: 5 3; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow">Fault Tree Utility</div>
+      <h1>RSA → JSON Converter</h1>
+      <div class="subtitle">Parse an RSA fault-tree export and pick the tree you need. Gates, basic events, and house events resolve into a nested JSON structure client-side — nothing leaves the browser.</div>
+    </div>
+    <div class="schema-tag">FTR · GAT · GIN · BEV · HEV</div>
+  </header>
+
+  <div class="panel">
+    <div class="drop-zone" id="dropZone">
+      <div class="glyph">⌁</div>
+      <div class="primary"><strong>Choose an RSA file</strong> or drop it here</div>
+      <div class="secondary">.rsa — parsed entirely in your browser</div>
+      <input type="file" id="fileInput" accept=".rsa,.txt,*/*">
+    </div>
+    <div class="status-row" id="statusRow">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">No file loaded</span>
+    </div>
+  </div>
+
+  <div id="statsPanel" style="display:none;">
+    <div class="stats-grid">
+      <div class="stat"><div class="num" id="statFT">0</div><div class="lbl">Fault Trees</div></div>
+      <div class="stat"><div class="num" id="statGAT">0</div><div class="lbl">Gates</div></div>
+      <div class="stat"><div class="num" id="statBEV">0</div><div class="lbl">Basic Events</div></div>
+      <div class="stat"><div class="num" id="statHEV">0</div><div class="lbl">House Events</div></div>
+    </div>
+  </div>
+
+  <div id="ftPanel" class="panel" style="display:none;">
+    <div class="section-label">Select a fault tree to export</div>
+    <div class="ft-list" id="ftList"></div>
+  </div>
+
+  <div id="resultPanel" class="panel" style="display:none;">
+    <div class="result-header">
+      <div class="rid">Exported: <span id="resultId"></span></div>
+      <div class="btn-row">
+        <button class="action" id="copyBtn">Copy JSON</button>
+        <button class="action primary" id="downloadBtn">Download .json</button>
+        <button class="action" id="backBtn">← Choose another tree</button>
+      </div>
+    </div>
+    <pre class="json-view" id="jsonView"></pre>
+  </div>
+
+  <div id="diagramPanel" class="panel" style="display:none;">
+    <div class="section-label">Diagram</div>
+    <div class="diagram-toolbar">
+      <div class="toggle-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="toggleDescriptions">
+          Show descriptions
+        </label>
+        <label class="toggle-label">
+          <input type="checkbox" id="cascadeCollapse">
+          Cascade gate collapse
+        </label>
+      </div>
+      <div class="btn-row">
+        <button class="action" id="expandAllBtn">Expand all</button>
+        <button class="action" id="resetViewBtn">Reset view</button>
+        <button class="action primary" id="downloadDiagramBtn">Download diagram (.html)</button>
+      </div>
+    </div>
+    <div class="diagram-frame" id="diagramFrame">
+      <div class="diagram-hint">drag to pan · scroll to zoom · click a gate to collapse &amp; compact</div>
+      <svg id="ftaSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2>Select fault tree</h2>
+        <p>This RSA file contains multiple fault trees. Choose one to build its JSON tree.</p>
+      </div>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="ft-list" id="modalFtList"></div>
+    </div>
+  </div>
+</div>
+
+<footer>RUNS LOCALLY · NO UPLOAD · NO SERVER ROUND-TRIP</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------
+  // Parser — mirrors RSAFaultTreeParser from RSA_to_JSON.py
+  // ---------------------------------------------------------------
+
+  class RSAFaultTreeParser {
+    constructor() {
+      this.faultTrees = {};   // ft_id -> { id, description, top_gate }
+      this.gates = {};        // gate_id -> { id, description, type, children_refs, ft_id }
+      this.basicEvents = {};  // id -> { id, description, type }
+      this.houseEvents = {};  // id -> { id, description, type }
+    }
+
+    tokenize(line) {
+      const re = /"[^"]*"|\S+/g;
+      return line.match(re) || [];
+    }
+
+    static unquote(tok) {
+      if (tok && tok.length >= 2 && tok[0] === '"' && tok[tok.length - 1] === '"') {
+        return tok.slice(1, -1);
+      }
+      return tok;
+    }
+
+    parse(text) {
+      let currentRecordType = null;
+      let currentObject = null; // [type, id]
+
+      const lines = text.split(/\r\n|\r|\n/);
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        if (line.startsWith("//RECORD:")) {
+          currentRecordType = line.replace("//RECORD:", "").trim();
+          currentObject = null;
+          continue;
+        }
+        if (line.startsWith("//")) continue;
+
+        const tokens = this.tokenize(line);
+        if (tokens.length === 0) continue;
+
+        const recType = tokens[0];
+
+        if (recType === "FTR") {
+          const ftId = RSAFaultTreeParser.unquote(tokens[1]);
+          const desc = RSAFaultTreeParser.unquote(tokens[2]);
+          this.faultTrees[ftId] = { id: ftId, description: desc, top_gate: null };
+          currentObject = ["FTR", ftId];
+
+        } else if (recType === "GAT") {
+          const gateId = RSAFaultTreeParser.unquote(tokens[1]);
+          if (this.gates[gateId]) { continue; }
+          const gateType = tokens[2];
+          const ftId = RSAFaultTreeParser.unquote(tokens[4]);
+          const isTop = parseInt(tokens[5], 10);
+          const desc = RSAFaultTreeParser.unquote(tokens[6]);
+
+          this.gates[gateId] = {
+            id: gateId,
+            description: desc,
+            type: gateType,
+            children_refs: [],
+            ft_id: ftId,
+          };
+
+          if (isTop === 1 && this.faultTrees[ftId]) {
+            this.faultTrees[ftId].top_gate = gateId;
+          }
+
+          currentObject = ["GAT", gateId];
+
+        } else if (recType === "GIN") {
+          if (currentObject && currentObject[0] === "GAT") {
+            const gateId = currentObject[1];
+            const inputType = tokens[1];
+            const inputId = RSAFaultTreeParser.unquote(tokens[2]);
+            this.gates[gateId].children_refs.push({ type: inputType, id: inputId });
+          }
+
+        } else if (recType === "BEV") {
+          const bevId = RSAFaultTreeParser.unquote(tokens[1]);
+          if (this.basicEvents[bevId]) { continue; }
+          const desc = RSAFaultTreeParser.unquote(tokens[5]);
+          this.basicEvents[bevId] = { id: bevId, description: desc, type: "BASIC" };
+          currentObject = ["BEV", bevId];
+
+        } else if (recType === "HEV") {
+          const hevId = RSAFaultTreeParser.unquote(tokens[1]);
+          if (this.houseEvents[hevId]) { continue; }
+          const desc = RSAFaultTreeParser.unquote(tokens[3]);
+          this.houseEvents[hevId] = { id: hevId, description: desc, type: "HOUSE" };
+          currentObject = ["HEV", hevId];
+        }
+      }
+
+      return this;
+    }
+
+    buildNode(nodeType, nodeId) {
+      if (nodeType === "BEV") {
+        return this.basicEvents[nodeId] || { id: nodeId, description: "", type: "BASIC" };
+      }
+      if (nodeType === "HEV") {
+        return this.houseEvents[nodeId] || { id: nodeId, description: "", type: "HOUSE" };
+      }
+      if (nodeType === "GAT") {
+        const gate = this.gates[nodeId];
+        if (!gate) throw new Error(`Missing gate definition: ${nodeId}`);
+        const node = {
+          id: gate.id,
+          description: gate.description,
+          type: gate.type,
+          children: [],
+        };
+        for (const child of gate.children_refs) {
+          node.children.push(this.buildNode(child.type, child.id));
+        }
+        return node;
+      }
+      throw new Error(`Unknown node type: ${nodeType}`);
+    }
+
+    exportFaultTree(ftId) {
+      const ft = this.faultTrees[ftId];
+      if (!ft) throw new Error(`Unknown fault tree '${ftId}'`);
+      if (!ft.top_gate) throw new Error(`No top gate found for fault tree '${ftId}'`);
+      return this.buildNode("GAT", ft.top_gate);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // UI wiring
+  // ---------------------------------------------------------------
+
+  const dropZone = document.getElementById("dropZone");
+  const fileInput = document.getElementById("fileInput");
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const statsPanel = document.getElementById("statsPanel");
+  const ftPanel = document.getElementById("ftPanel");
+  const ftList = document.getElementById("ftList");
+  const resultPanel = document.getElementById("resultPanel");
+  const jsonView = document.getElementById("jsonView");
+  const resultId = document.getElementById("resultId");
+  const modalOverlay = document.getElementById("modalOverlay");
+  const modalFtList = document.getElementById("modalFtList");
+  const modalClose = document.getElementById("modalClose");
+  const copyBtn = document.getElementById("copyBtn");
+  const downloadBtn = document.getElementById("downloadBtn");
+  const backBtn = document.getElementById("backBtn");
+
+  let parser = null;
+  let currentFileName = "fault_trees";
+  let currentExport = null;
+  let currentExportId = null;
+
+  dropZone.addEventListener("click", () => fileInput.click());
+  ["dragover", "dragenter"].forEach(evt =>
+    dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add("dragover"); })
+  );
+  ["dragleave", "drop"].forEach(evt =>
+    dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove("dragover"); })
+  );
+  dropZone.addEventListener("drop", (e) => {
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (f) handleFile(f);
+  });
+
+  function setStatus(text, state) {
+    statusText.textContent = text;
+    statusDot.className = "status-dot" + (state ? " " + state : "");
+  }
+
+  function handleFile(file) {
+    currentFileName = file.name.replace(/\.[^/.]+$/, "") || "fault_trees";
+    setStatus(`Reading ${file.name}…`, "");
+    resultPanel.style.display = "none";
+    ftPanel.style.display = "none";
+    statsPanel.style.display = "none";
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        parser = new RSAFaultTreeParser().parse(reader.result);
+        const ftCount = Object.keys(parser.faultTrees).length;
+        if (ftCount === 0) {
+          setStatus("No fault trees (FTR records) found in this file.", "err");
+          return;
+        }
+        setStatus(`Loaded ${file.name} — ${ftCount} fault tree${ftCount === 1 ? "" : "s"} found.`, "ok");
+        showStats();
+        renderFtList();
+      } catch (err) {
+        console.error(err);
+        setStatus(`Failed to parse file: ${err.message}`, "err");
+      }
+    };
+    reader.onerror = () => setStatus("Could not read file from disk.", "err");
+    reader.readAsText(file, "utf-8");
+  }
+
+  function showStats() {
+    document.getElementById("statFT").textContent = Object.keys(parser.faultTrees).length;
+    document.getElementById("statGAT").textContent = Object.keys(parser.gates).length;
+    document.getElementById("statBEV").textContent = Object.keys(parser.basicEvents).length;
+    document.getElementById("statHEV").textContent = Object.keys(parser.houseEvents).length;
+    statsPanel.style.display = "block";
+  }
+
+  function buildFtRow(ftId, ft, forModal) {
+    const row = document.createElement("div");
+    const hasTop = !!ft.top_gate;
+    row.className = "ft-row" + (hasTop ? "" : " disabled");
+
+    const main = document.createElement("div");
+    main.className = "ft-main";
+    const idEl = document.createElement("div");
+    idEl.className = "ft-id";
+    idEl.textContent = ftId;
+    const descEl = document.createElement("div");
+    descEl.className = "ft-desc";
+    descEl.textContent = ft.description || "(no description)";
+    main.appendChild(idEl);
+    main.appendChild(descEl);
+    row.appendChild(main);
+
+    if (!hasTop) {
+      const flag = document.createElement("span");
+      flag.className = "ft-flag";
+      flag.textContent = "NO TOP GATE";
+      row.appendChild(flag);
+    } else {
+      const arrow = document.createElement("span");
+      arrow.className = "ft-arrow";
+      arrow.textContent = "→";
+      row.appendChild(arrow);
+      row.addEventListener("click", () => {
+        exportTree(ftId);
+        if (forModal) closeModal();
+      });
+    }
+
+    return row;
+  }
+
+  function renderFtList() {
+    ftList.innerHTML = "";
+    modalFtList.innerHTML = "";
+    const ids = Object.keys(parser.faultTrees);
+
+    ids.forEach((ftId) => {
+      const ft = parser.faultTrees[ftId];
+      ftList.appendChild(buildFtRow(ftId, ft, false));
+      modalFtList.appendChild(buildFtRow(ftId, ft, true));
+    });
+
+    ftPanel.style.display = ids.length > 1 ? "block" : "block";
+  }
+
+  function openModal() {
+    if (!parser || Object.keys(parser.faultTrees).length <= 1) return;
+    modalOverlay.classList.add("open");
+  }
+  function closeModal() {
+    modalOverlay.classList.remove("open");
+  }
+  modalClose.addEventListener("click", closeModal);
+  modalOverlay.addEventListener("click", (e) => { if (e.target === modalOverlay) closeModal(); });
+
+  function exportTree(ftId) {
+    try {
+      const tree = parser.exportFaultTree(ftId);
+      currentExport = tree;
+      currentExportId = ftId;
+      resultId.textContent = ftId;
+      jsonView.textContent = JSON.stringify(tree, null, 4);
+      resultPanel.style.display = "block";
+      resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      renderDiagram(tree, ftId);
+    } catch (err) {
+      console.error(err);
+      setStatus(`Export failed for ${ftId}: ${err.message}`, "err");
+    }
+  }
+
+  backBtn.addEventListener("click", () => {
+    resultPanel.style.display = "none";
+    ftPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  copyBtn.addEventListener("click", async () => {
+    if (!currentExport) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(currentExport, null, 4));
+      const original = copyBtn.textContent;
+      copyBtn.textContent = "Copied ✓";
+      setTimeout(() => { copyBtn.textContent = original; }, 1400);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  downloadBtn.addEventListener("click", () => {
+    if (!currentExport) return;
+    const blob = new Blob([JSON.stringify(currentExport, null, 4)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentFileName}_${currentExportId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // Auto-open the picker modal when there's more than one tree,
+  // right after a fresh load, as a convenience prompt.
+  const originalRenderFtList = renderFtList;
+  renderFtList = function () {
+    originalRenderFtList();
+    const ids = Object.keys(parser.faultTrees);
+    if (ids.length > 1) {
+      setTimeout(openModal, 150);
+    } else if (ids.length === 1) {
+      exportTree(ids[0]);
+    }
+  };
+
+  // ---------------------------------------------------------------
+  // Diagram engine — ported from TreeViewer.py
+  // ---------------------------------------------------------------
+
+  const H_SPACING = 180;
+  const V_SPACING = 140;
+
+  const NODE_WIDTHS = { BASIC: 60, HOUSE: 50, AND: 50, OR: 60, NAND: 50, NOR: 60 };
+  const DEFAULT_NODE_WIDTH = 60;
+  const CHAR_WIDTH = 7;
+  const LINE_HEIGHT = 14;
+  const TOP_PADDING = 16;
+  const BOTTOM_PADDING = 8;
+  const INNER_PADDING = 6;
+
+  const VOTE_TYPES = new Set(["ATLEAST", "AT_LEAST", "VOTE", "VOTING", "KOFN", "K_OUT_OF_N"]);
+
+  let _instanceCounter = 0;
+
+  function escapeXml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // A node can be referenced more than once in principle; give every
+  // occurrence its own independent copy (and its own position) before
+  // layout runs, so connectors never converge on a shared point.
+  function materialize(node) {
+    _instanceCounter += 1;
+    const newNode = Object.assign({}, node);
+    newNode._instance_id = "inst" + _instanceCounter;
+    const children = node.children || [];
+    newNode.children = children.map(materialize);
+    return newNode;
+  }
+
+  function layoutTree(node, depth, x, collapsedSet) {
+    node.y = depth * V_SPACING;
+    const isGate = !!(GATE_DRAW_FUNCS[node.type] || isVoteType(node.type));
+    const isOpen = isGate && !collapsedSet.has(node._instance_id);
+    const children = isOpen ? (node.children || []) : [];
+
+    if (children.length === 0) {
+      node.x = x;
+      return x + H_SPACING;
+    }
+
+    let nextX = x;
+    for (const child of children) {
+      nextX = layoutTree(child, depth + 1, nextX, collapsedSet);
+    }
+    node.x = (children[0].x + children[children.length - 1].x) / 2;
+    return nextX;
+  }
+
+  function collectVisibleNodes(node, collapsedSet, nodes) {
+    nodes.push(node);
+    const isGate = !!(GATE_DRAW_FUNCS[node.type] || isVoteType(node.type));
+    if (isGate && !collapsedSet.has(node._instance_id)) {
+      for (const child of node.children || []) collectVisibleNodes(child, collapsedSet, nodes);
+    }
+  }
+
+  // Walks the *full* subtree (ignoring current collapse state) and collects
+  // the instance ids of every descendant gate. Used for cascade collapse.
+  function collectDescendantGateIds(node, ids) {
+    for (const child of node.children || []) {
+      const isGate = !!(GATE_DRAW_FUNCS[child.type] || isVoteType(child.type));
+      if (isGate) {
+        ids.push(child._instance_id);
+        collectDescendantGateIds(child, ids);
+      }
+    }
+  }
+
+  function buildInstanceMap(node, map) {
+    map.set(node._instance_id, node);
+    for (const child of node.children || []) buildInstanceMap(child, map);
+  }
+
+  function getNodeWidth(nodeType) {
+    return NODE_WIDTHS[nodeType] !== undefined ? NODE_WIDTHS[nodeType] : DEFAULT_NODE_WIDTH;
+  }
+
+  function wrapText(text, maxChars) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = "";
+    for (const w of words) {
+      const candidate = cur ? cur + " " + w : w;
+      if (candidate.length <= maxChars) {
+        cur = candidate;
+      } else {
+        if (cur) lines.push(cur);
+        cur = w;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines.length ? lines : [text];
+  }
+
+  function drawDescription(x, y, text, nodeType) {
+    const nodeWidth = getNodeWidth(nodeType);
+    const width = nodeWidth * 1.2;
+    const usableWidth = Math.max(width - 2 * INNER_PADDING, CHAR_WIDTH);
+    const maxChars = Math.max(1, Math.floor(usableWidth / CHAR_WIDTH));
+    const lines = wrapText(text, maxChars);
+    const height = TOP_PADDING + (lines.length - 1) * LINE_HEIGHT + BOTTOM_PADDING;
+    const left = x - width / 2;
+    const bottom = y - 75 + 24;
+    const top = bottom - height;
+    const firstBaseline = top + TOP_PADDING;
+
+    const tspans = lines
+      .map((line, i) => `<tspan x="${x}" dy="${i === 0 ? 0 : LINE_HEIGHT}">${escapeXml(line)}</tspan>`)
+      .join("");
+
+    return `
+    <g class="description-box">
+      <rect x="${left}" y="${top}" width="${width}" height="${height}" rx="4" ry="4"
+            fill="#f8f8f8" stroke="#888" stroke-width="1"/>
+      <text x="${x}" y="${firstBaseline}" text-anchor="middle">${tspans}</text>
+    </g>`;
+  }
+
+  function drawBasic(x, y, label) {
+    return `
+    <g class="basic-event">
+      <circle cx="${x}" cy="${y}" r="30" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 50}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawHouse(x, y, label) {
+    const pts = `${x - 25},${y} ${x},${y - 25} ${x + 25},${y} ${x + 25},${y + 35} ${x - 25},${y + 35}`;
+    return `
+    <g class="house-event">
+      <polygon points="${pts}" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 55}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawAnd(x, y, label) {
+    return `
+    <g class="and-gate">
+      <path d="M${x - 25},${y + 20} L${x - 25},${y} A25,25 0 0,1 ${x + 25},${y} L${x + 25},${y + 20} Z"
+            fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 35}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function orPathD(x, y) {
+    return `M${x - 30},${y + 25} Q${x - 15},${y - 20} ${x},${y - 30} Q${x + 15},${y - 20} ${x + 30},${y + 25} Q${x},${y + 10} ${x - 30},${y + 25}`;
+  }
+
+  function drawOr(x, y, label) {
+    return `
+    <g class="or-gate">
+      <path d="${orPathD(x, y)}" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 35}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawNand(x, y, label) {
+    const bubbleR = 8;
+    const bubbleCy = y - 25 - bubbleR;
+    return `
+    <g class="nand-gate">
+      <path d="M${x - 25},${y + 20} L${x - 25},${y} A25,25 0 0,1 ${x + 25},${y} L${x + 25},${y + 20} Z"
+            fill="white" stroke="black" stroke-width="2"/>
+      <circle cx="${x}" cy="${bubbleCy}" r="${bubbleR}" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 35}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawNor(x, y, label) {
+    const bubbleR = 8;
+    const bubbleCy = y - 30 - bubbleR;
+    return `
+    <g class="nor-gate">
+      <path d="${orPathD(x, y)}" fill="white" stroke="black" stroke-width="2"/>
+      <circle cx="${x}" cy="${bubbleCy}" r="${bubbleR}" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 35}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawVote(x, y, k, n, label) {
+    return `
+    <g class="vote-gate">
+      <path d="${orPathD(x, y)}" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 2}" text-anchor="middle" font-weight="bold">${escapeXml(k)}/${escapeXml(n)}</text>
+      <text x="${x}" y="${y + 35}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawTransfer(x, y, label) {
+    const pts = `${x},${y - 30} ${x - 30},${y + 20} ${x + 30},${y + 20}`;
+    return `
+    <g class="transfer-gate">
+      <polygon points="${pts}" fill="white" stroke="black" stroke-width="2"/>
+      <text x="${x}" y="${y + 55}" text-anchor="middle">${escapeXml(label)}</text>
+    </g>`;
+  }
+
+  function drawConnector(parent, child) {
+    const px = parent.x, py = parent.y, cx = child.x, cy = child.y;
+    const midY = (py + cy) / 2;
+    return `
+    <path d="M${px},${py + 25} L${px},${midY} L${cx},${midY} L${cx},${cy - 30}"
+          fill="none" stroke="black" stroke-width="2"/>`;
+  }
+
+  const GATE_DRAW_FUNCS = {
+    AND: (x, y, node) => drawAnd(x, y, node.id),
+    OR: (x, y, node) => drawOr(x, y, node.id),
+    NAND: (x, y, node) => drawNand(x, y, node.id),
+    NOR: (x, y, node) => drawNor(x, y, node.id),
+  };
+
+  function isVoteType(nodeType) {
+    if (VOTE_TYPES.has(nodeType)) return true;
+    if (typeof nodeType === "number") return true;
+    if (typeof nodeType === "string" && /^-?\d+$/.test(nodeType.trim())) return true;
+    return false;
+  }
+
+  function getVoteKN(node) {
+    const nodeType = node.type;
+    const n = (node.children || []).length;
+
+    if (typeof nodeType === "number") return [nodeType, n];
+    if (typeof nodeType === "string" && /^-?\d+$/.test(nodeType.trim())) {
+      return [parseInt(nodeType.trim(), 10), n];
+    }
+    for (const kKey of ["k", "vote_k", "min"]) {
+      if (node[kKey] !== undefined) return [node[kKey], n];
+    }
+    if (node.vote !== undefined) {
+      const v = node.vote;
+      if (typeof v === "string" && v.includes("/")) return [v.split("/")[0], n];
+      return [v, n];
+    }
+    return ["?", n];
+  }
+
+  function renderNode(node, collapsedSet) {
+    const x = node.x, y = node.y;
+    const instanceId = node._instance_id;
+    const nodeType = node.type;
+    const isGate = !!(GATE_DRAW_FUNCS[nodeType] || isVoteType(nodeType));
+    const isCollapsed = isGate && collapsedSet.has(instanceId);
+
+    let svg = `<g class="node${isCollapsed ? " collapsed" : ""}" id="node-${instanceId}" data-node="${instanceId}" data-collapsible="${isGate}">`;
+
+    if (node.description) {
+      svg += drawDescription(x, y, node.description, nodeType);
+    }
+
+    if (isGate) {
+      if (isCollapsed) {
+        svg += drawTransfer(x, y, node.id);
+      } else if (isVoteType(nodeType)) {
+        const [k, n] = getVoteKN(node);
+        svg += drawVote(x, y, k, n, node.id);
+      } else {
+        svg += GATE_DRAW_FUNCS[nodeType](x, y, node);
+      }
+    } else if (nodeType === "BASIC") {
+      svg += drawBasic(x, y, node.id);
+    } else if (nodeType === "HOUSE") {
+      svg += drawHouse(x, y, node.id);
+    }
+
+    svg += "</g>";
+
+    if (isGate && !isCollapsed) {
+      for (const child of node.children || []) {
+        svg += `<g class="subtree" data-parent="${instanceId}">`;
+        svg += drawConnector(node, child);
+        svg += renderNode(child, collapsedSet);
+        svg += "</g>";
+      }
+    }
+
+    return svg;
+  }
+
+  function computeLayoutAndRender(tree, collapsedSet) {
+    layoutTree(tree, 0, 0, collapsedSet);
+
+    const nodes = [];
+    collectVisibleNodes(tree, collapsedSet, nodes);
+
+    const minX = Math.min(...nodes.map(n => n.x));
+    const maxX = Math.max(...nodes.map(n => n.x));
+    const minY = Math.min(...nodes.map(n => n.y));
+    const maxY = Math.max(...nodes.map(n => n.y));
+    const margin = 200;
+
+    return {
+      svgContent: renderNode(tree, collapsedSet),
+      rootX: tree.x,
+      rootY: tree.y,
+      svgWidth: maxX - minX + 2 * margin,
+      svgHeight: maxY - minY + 2 * margin,
+    };
+  }
+
+  // ---------------------------------------------------------------
+  // Diagram panel wiring — pan / zoom / collapse / description toggle
+  // ---------------------------------------------------------------
+
+  const diagramPanel = document.getElementById("diagramPanel");
+  const diagramFrame = document.getElementById("diagramFrame");
+  const ftaSvg = document.getElementById("ftaSvg");
+  const toggleDescriptions = document.getElementById("toggleDescriptions");
+  const cascadeCollapse = document.getElementById("cascadeCollapse");
+  const resetViewBtn = document.getElementById("resetViewBtn");
+  const expandAllBtn = document.getElementById("expandAllBtn");
+  const downloadDiagramBtn = document.getElementById("downloadDiagramBtn");
+
+  function attachPanZoom(svg, rootX, rootY) {
+    svg.setAttribute("viewBox", `${rootX - 500} ${rootY - 100} 1000 700`);
+    const vb = svg.viewBox.baseVal;
+
+    // Fill the frame at 1:1 scale centred on the root, like the source tool.
+    const rect = svg.getBoundingClientRect();
+    vb.width = rect.width || 1000;
+    vb.height = rect.height || 700;
+    vb.x = rootX - vb.width / 2;
+    vb.y = rootY - 100;
+
+    let isPanning = false;
+    let startX = 0, startY = 0, svgX = 0, svgY = 0;
+
+    svg.onmousedown = (e) => {
+      isPanning = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      svgX = vb.x;
+      svgY = vb.y;
+      svg.style.cursor = "grabbing";
+    };
+    window.addEventListener("mouseup", () => {
+      isPanning = false;
+      svg.style.cursor = "grab";
+    });
+    svg.onmousemove = (e) => {
+      if (!isPanning) return;
+      const dx = (e.clientX - startX) * (vb.width / rect.width);
+      const dy = (e.clientY - startY) * (vb.height / rect.height);
+      vb.x = svgX - dx;
+      vb.y = svgY - dy;
+    };
+    svg.onwheel = (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
+      const mx = e.offsetX / rect.width;
+      const my = e.offsetY / rect.height;
+      const newWidth = vb.width * zoomFactor;
+      const newHeight = vb.height * zoomFactor;
+      vb.x += (vb.width - newWidth) * mx;
+      vb.y += (vb.height - newHeight) * my;
+      vb.width = newWidth;
+      vb.height = newHeight;
+    };
+
+    svg.style.cursor = "grab";
+  }
+
+  // Re-query and (re)bind click-to-collapse handlers on the current set of
+  // .node elements. Called after every render, since re-rendering replaces
+  // the SVG's children.
+  function attachNodeClickHandlers(svg) {
+    svg.querySelectorAll(".node").forEach((nodeEl) => {
+      nodeEl.onclick = function (e) {
+        e.stopPropagation();
+        if (this.dataset.collapsible !== "true") return;
+        const nodeId = this.dataset.node;
+
+        if (collapsedInstances.has(nodeId)) {
+          // Expand is never recursive: only this gate re-opens, any
+          // descendants collapsed as part of an earlier cascade stay
+          // collapsed as their own transfer symbols.
+          collapsedInstances.delete(nodeId);
+        } else {
+          collapsedInstances.add(nodeId);
+          if (cascadeCollapse.checked) {
+            const node = instanceMap.get(nodeId);
+            const descendantIds = [];
+            if (node) collectDescendantGateIds(node, descendantIds);
+            descendantIds.forEach((id) => collapsedInstances.add(id));
+          }
+        }
+        relayoutAndRender();
+      };
+    });
+  }
+
+  let currentTree = null;         // materialized tree (mutable x/y, stable instance ids)
+  let currentFtId = null;
+  let collapsedInstances = new Set();
+  let instanceMap = new Map();    // instance id -> node reference, for cascade lookups
+  let lastDiagram = null;         // { svgContent, rootX, rootY, svgWidth, svgHeight, ftId }
+
+  // Recompute layout against the current collapse state and re-render the
+  // SVG in place. Collapsed gates are treated as leaves during layout, so
+  // the whole diagram compacts around them instead of just hiding a subtree.
+  function relayoutAndRender() {
+    const diagram = computeLayoutAndRender(currentTree, collapsedInstances);
+    lastDiagram = Object.assign({ ftId: currentFtId }, diagram);
+    ftaSvg.innerHTML = diagram.svgContent;
+    attachNodeClickHandlers(ftaSvg);
+  }
+
+  function renderDiagram(treeJson, ftId) {
+    _instanceCounter = 0;
+    currentTree = materialize(treeJson);
+    currentFtId = ftId;
+    collapsedInstances = new Set();
+    instanceMap = new Map();
+    buildInstanceMap(currentTree, instanceMap);
+
+    relayoutAndRender();
+    attachPanZoom(ftaSvg, lastDiagram.rootX, lastDiagram.rootY);
+    diagramFrame.classList.toggle("show-descriptions", toggleDescriptions.checked);
+    diagramPanel.style.display = "block";
+  }
+
+  toggleDescriptions.addEventListener("change", () => {
+    diagramFrame.classList.toggle("show-descriptions", toggleDescriptions.checked);
+  });
+
+  resetViewBtn.addEventListener("click", () => {
+    if (!lastDiagram) return;
+    attachPanZoom(ftaSvg, lastDiagram.rootX, lastDiagram.rootY);
+  });
+
+  expandAllBtn.addEventListener("click", () => {
+    if (!currentTree || collapsedInstances.size === 0) return;
+    collapsedInstances.clear();
+    relayoutAndRender();
+  });
+
+
+  // Bundles the actual engine functions (by source text) so the exported
+  // standalone file behaves identically to the live view, including
+  // click-to-collapse compact relayout — no separate implementation to
+  // keep in sync.
+  function engineSourceBundle() {
+    const consts = [
+      `const H_SPACING = ${H_SPACING};`,
+      `const V_SPACING = ${V_SPACING};`,
+      `const NODE_WIDTHS = ${JSON.stringify(NODE_WIDTHS)};`,
+      `const DEFAULT_NODE_WIDTH = ${DEFAULT_NODE_WIDTH};`,
+      `const CHAR_WIDTH = ${CHAR_WIDTH};`,
+      `const LINE_HEIGHT = ${LINE_HEIGHT};`,
+      `const TOP_PADDING = ${TOP_PADDING};`,
+      `const BOTTOM_PADDING = ${BOTTOM_PADDING};`,
+      `const INNER_PADDING = ${INNER_PADDING};`,
+      `const VOTE_TYPES = new Set(${JSON.stringify([...VOTE_TYPES])});`,
+      `const GATE_DRAW_FUNCS = { AND: (x,y,node) => drawAnd(x,y,node.id), OR: (x,y,node) => drawOr(x,y,node.id), NAND: (x,y,node) => drawNand(x,y,node.id), NOR: (x,y,node) => drawNor(x,y,node.id) };`,
+    ].join("\n");
+
+    const fns = [
+      escapeXml, getNodeWidth, wrapText, drawDescription, drawBasic, drawHouse,
+      drawAnd, orPathD, drawOr, drawNand, drawNor, drawVote, drawTransfer,
+      drawConnector, isVoteType, getVoteKN, layoutTree, collectVisibleNodes,
+      collectDescendantGateIds, buildInstanceMap, renderNode,
+    ].map(f => f.toString()).join("\n\n");
+
+    return consts + "\n\n" + fns;
+  }
+
+  function standaloneDiagramHtml(tree, collapsedSet, ftId, showDescriptions, cascadeChecked) {
+    const treeJson = JSON.stringify(tree);
+    const collapsedJson = JSON.stringify([...collapsedSet]);
+    const engine = engineSourceBundle();
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fault Tree Viewer — ${escapeXml(ftId)}</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background:#ffffff; }
+svg { border: 1px solid #cccccc; display: block; width: 100%; height: calc(100vh - 140px); cursor: grab; user-select: none; }
+text { font-size: 12px; }
+.description-box { visibility: ${showDescriptions ? "visible" : "hidden"}; opacity: ${showDescriptions ? "1" : "0"}; transition: opacity 0.15s; }
+.show-descriptions .description-box { visibility: visible; opacity: 1; }
+.node:hover > .description-box { visibility: visible; opacity: 1; }
+.basic-event:hover circle, .house-event:hover polygon, .and-gate:hover path, .or-gate:hover path,
+.nand-gate:hover path, .nand-gate:hover circle, .nor-gate:hover path, .nor-gate:hover circle,
+.vote-gate:hover path { fill: #fff3b0; }
+.transfer-gate:hover polygon { fill: #fff3b0; }
+.node[data-collapsible="true"] { cursor: pointer; }
+.node.collapsed .transfer-gate polygon { stroke-dasharray: 5 3; }
+label { margin-right: 12px; }
+</style>
+</head>
+<body>
+<h2>Fault Tree Viewer — ${escapeXml(ftId)}</h2>
+<label><input type="checkbox" id="toggleDescriptions" ${showDescriptions ? "checked" : ""}> Show descriptions</label>
+<label><input type="checkbox" id="cascadeCollapse" ${cascadeChecked ? "checked" : ""}> Cascade gate collapse</label>
+<button id="expandAllBtn" style="margin-left:12px;">Expand all</button>
+<span style="margin-left:12px;color:#777;font-size:12.5px;">drag to pan · scroll to zoom · click a gate to collapse &amp; compact</span>
+<br><br>
+<svg id="ftaSvg" width="${lastDiagram ? lastDiagram.svgWidth : 1000}" height="${lastDiagram ? lastDiagram.svgHeight : 700}" viewBox="0 0 1000 700"></svg>
+<${""}script>
+${engine}
+
+const treeData = ${treeJson};
+const collapsedInstances = new Set(${collapsedJson});
+const instanceMap = new Map();
+buildInstanceMap(treeData, instanceMap);
+
+function layoutAndRender() {
+  layoutTree(treeData, 0, 0, collapsedInstances);
+  const svg = document.getElementById("ftaSvg");
+  svg.innerHTML = renderNode(treeData, collapsedInstances);
+  attachNodeClicks();
+}
+
+function attachNodeClicks() {
+  const cascadeBox = document.getElementById("cascadeCollapse");
+  document.querySelectorAll(".node").forEach(node => {
+    node.onclick = function (e) {
+      e.stopPropagation();
+      if (this.dataset.collapsible !== "true") return;
+      const nodeId = this.dataset.node;
+
+      if (collapsedInstances.has(nodeId)) {
+        // Expand is never recursive: descendants collapsed via an earlier
+        // cascade stay collapsed as their own transfer symbols.
+        collapsedInstances.delete(nodeId);
+      } else {
+        collapsedInstances.add(nodeId);
+        if (cascadeBox.checked) {
+          const n = instanceMap.get(nodeId);
+          const descendantIds = [];
+          if (n) collectDescendantGateIds(n, descendantIds);
+          descendantIds.forEach(id => collapsedInstances.add(id));
+        }
+      }
+      layoutAndRender();
+    };
+  });
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("toggleDescriptions").addEventListener("change", function () {
+    document.body.classList.toggle("show-descriptions", this.checked);
+  });
+  if (${showDescriptions ? "true" : "false"}) document.body.classList.add("show-descriptions");
+
+  document.getElementById("expandAllBtn").addEventListener("click", () => {
+    collapsedInstances.clear();
+    layoutAndRender();
+  });
+
+  layoutAndRender();
+
+  const svg = document.getElementById("ftaSvg");
+  let viewBox = svg.viewBox.baseVal;
+  viewBox.width = svg.clientWidth;
+  viewBox.height = svg.clientHeight;
+  viewBox.x = treeData.x - viewBox.width / 2;
+  viewBox.y = treeData.y - 100;
+
+  let isPanning = false, startX = 0, startY = 0, svgX = 0, svgY = 0;
+
+  svg.addEventListener("mousedown", e => {
+    isPanning = true; startX = e.clientX; startY = e.clientY;
+    svgX = viewBox.x; svgY = viewBox.y; svg.style.cursor = "grabbing";
+  });
+  window.addEventListener("mouseup", () => { isPanning = false; svg.style.cursor = "grab"; });
+  svg.addEventListener("mousemove", e => {
+    if (!isPanning) return;
+    const dx = (e.clientX - startX) * (viewBox.width / svg.clientWidth);
+    const dy = (e.clientY - startY) * (viewBox.height / svg.clientHeight);
+    viewBox.x = svgX - dx; viewBox.y = svgY - dy;
+  });
+  svg.addEventListener("wheel", e => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
+    const mx = e.offsetX / svg.clientWidth, my = e.offsetY / svg.clientHeight;
+    const newWidth = viewBox.width * zoomFactor, newHeight = viewBox.height * zoomFactor;
+    viewBox.x += (viewBox.width - newWidth) * mx;
+    viewBox.y += (viewBox.height - newHeight) * my;
+    viewBox.width = newWidth; viewBox.height = newHeight;
+  });
+  svg.style.cursor = "grab";
+});
+<${""}/script>
+</body>
+</html>`;
+  }
+
+  downloadDiagramBtn.addEventListener("click", () => {
+    if (!currentTree) return;
+    const html = standaloneDiagramHtml(currentTree, collapsedInstances, currentFtId, toggleDescriptions.checked, cascadeCollapse.checked);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentFtId}_diagram.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+})();
+</script>
+
+</body>
+</html>
