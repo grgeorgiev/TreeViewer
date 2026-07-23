@@ -20,5 +20,5 @@ There is also a toggle to cascade the transfer collapse down to the children gat
 
 ## Limitations 
 
-The RSA needs to be encoded in UTF-8.
-The CCF Basic Events are not included in the tree logic inside RSA, therefore they can't currently be visualised. 
+- The RSA needs to be encoded in UTF-8.
+- The CCF Basic Events are not included in the tree logic inside RSA, therefore they can't currently be visualised. 
